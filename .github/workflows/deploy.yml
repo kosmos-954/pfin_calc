@@ -1,0 +1,30 @@
+name: Deploy to GCP Cloud Functions
+
+on:
+  push:
+    branches:
+      - main # Пайплайн запускается при коммите в ветку main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Deploy Cloud Function
+        uses: google-github-actions/deploy-cloud-functions@v2
+        with:
+          name: stellar-bot
+          runtime: python311
+          region: us-central1
+          entry_point: handle_request
+          source_dir: .
+          env_vars: |-
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}

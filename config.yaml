@@ -1,0 +1,20 @@
+telegram:
+  bot_token: "your_bot_token_here"
+  chat_id: "your_chat_id_here"
+
+stellar:
+  horizon_url: "https://horizon.stellar.org"
+  target_account: "GAPGIQDO5NBLFUOFJKYZBFWDBP42UNHUUO5UBGIF5C3VGFTT5CRB7S2X" # Кошелек, с которого идут выплаты/выкуп
+  base_asset: "PFIN"
+  payment_asset: "USDM"
+  asset_issuer: "GBFRRPHZJZZMYMYX4E22XHXKGX2CRJBZIDHHP3ACSYIY5KTX7QVEPFIN"
+
+# Дата начала обязательства (не дата первой выплаты!)
+schedule_start: "2025-10-01"
+# Через сколько месяцев после schedule_start — первая выплата/выкуп
+# Например: 1 → первая выплата 01.11.2025
+payment_delay_months: 1
+# Базовая ставка в год старта: 0.1% (+0.1% каждый следующий год)
+base_rate_pct: 0.1
+# Окно мониторинга в минутах (запускать кроном с той же периодичностью)
+monitor_window_minutes: 43200
