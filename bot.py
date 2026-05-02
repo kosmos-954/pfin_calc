@@ -439,8 +439,8 @@ def run_weekly_audit(config):  # FIFO-атрибуция
                   f"(+burn {burns_after:.4f} -mint {mints_after:.4f}) "
                   f"| target={target_bal:.4f} | обр={circulation:.4f} | ожид={exp:.4f}")
 
-        total_pfin_current = periods[-1]['circulation'] if periods else Decimal('0')
-        print(f"[*] Текущее обращение (последний период): {total_pfin_current:.7f}")
+        total_pfin_last_period_start = periods[-1]['circulation'] if periods else Decimal('0')
+        print(f"[*] Обращение на начало последнего периода: {total_pfin_last_period_start:.7f}")
 
         # 5. FIFO-атрибуция: платежи от старых к новым закрывают самое старое обязательство.
         def fifo_attribute(ops_list, exp_key):
