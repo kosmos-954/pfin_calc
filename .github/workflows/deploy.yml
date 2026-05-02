@@ -18,6 +18,7 @@ jobs:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
       - name: Deploy Cloud Function
+        id: deploy
         uses: google-github-actions/deploy-cloud-functions@v2
         with:
           name: stellar-bot
@@ -26,12 +27,16 @@ jobs:
           entry_point: handle_request
           source_dir: .
           generation: 2
-          # service_account — runtime SA (от чьего имени выполняется функция)
-          # Если не указан, используется дефолтный Compute SA проекта.
-          # Для явного указания создайте отдельный SA и раскомментируйте:
-          # service_account: stellar-bot-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-          timeout: 540s        # макс. 540 с для Gen2; аудит сканирует блокчейн
-          memory: 512Mi        # Stellar SDK + paging требует памяти
+          timeout: 540s
+          memory: 512Mi
           env_vars: |-
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Verify deployment
+        run: |
+          echo "Function URL: ${{ steps.deploy.outputs.url }}"
+          gcloud functions describe stellar-bot \
+            --v2 \
+            --region=us-central1 \
+            --format="table(name, state, serviceConfig.uri)"

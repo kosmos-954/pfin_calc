@@ -224,7 +224,7 @@ gcloud run services add-iam-policy-binding stellar-bot \
 **4.1. Получение URL функции:**
 ```bash
 FUNCTION_URL=$(gcloud functions describe stellar-bot \
-  --gen2 \
+  --v2 \
   --region=us-central1 \
   --format="value(serviceConfig.uri)")
 
@@ -292,7 +292,36 @@ gcloud scheduler jobs create http trigger-calculate \
 
 ## 5. Эксплуатация и мониторинг
 
-**Принудительный запуск задачи вне расписания (тестирование):**
+### 5.0. Диагностика после деплоя
+
+Если `gcloud run services list --region=us-central1` возвращает `Listed 0 items` после деплоя через GitHub Actions:
+
+```bash
+# 1. Проверить в каком проекте вы находитесь локально
+gcloud config get-value project
+
+# GCP_CREDENTIALS в GitHub Actions могут указывать на ДРУГОЙ проект.
+# project_id содержится в JSON-файле секрета GCP_CREDENTIALS.
+
+# 2. Переключиться в нужный проект
+gcloud config set project YOUR_PROJECT_ID
+
+# 3. Проверить список функций Gen2
+gcloud functions list --v2 --regions=us-central1
+
+# 4. Проверить список функций Gen1 (если случайно задеплоилась как Gen1)
+gcloud functions list --regions=us-central1
+
+# 5. Получить статус и URL конкретной функции
+gcloud functions describe stellar-bot \
+  --v2 \
+  --region=us-central1 \
+  --format="table(name, state, serviceConfig.uri)"
+```
+
+> **Частая причина:** GitHub Actions деплоил в проект из `GCP_CREDENTIALS`, а локальный `gcloud` смотрит в другой проект. Проверьте PROJECT_ID в содержимом секрета `GCP_CREDENTIALS` (поле `"project_id"`).
+
+---**Принудительный запуск задачи вне расписания (тестирование):**
 ```bash
 gcloud scheduler jobs run trigger-audit --location="us-central1"
 ```
@@ -313,14 +342,14 @@ gcloud logging read \
 
 **Проверка статуса деплоя:**
 ```bash
-gcloud functions describe stellar-bot --gen2 --region=us-central1
+gcloud functions describe stellar-bot --v2 --region=us-central1
 ```
 
 **Ручной тест через curl (без scheduler):**
 ```bash
 TOKEN=$(gcloud auth print-identity-token)
 FUNCTION_URL=$(gcloud functions describe stellar-bot \
-  --gen2 --region=us-central1 \
+  --v2 --region=us-central1 \
   --format="value(serviceConfig.uri)")
 
 curl -X POST "$FUNCTION_URL" \
