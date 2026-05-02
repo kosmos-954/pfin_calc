@@ -26,7 +26,12 @@ jobs:
           entry_point: handle_request
           source_dir: .
           generation: 2
-          service_account: github-deployer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          # service_account — runtime SA (от чьего имени выполняется функция)
+          # Если не указан, используется дефолтный Compute SA проекта.
+          # Для явного указания создайте отдельный SA и раскомментируйте:
+          # service_account: stellar-bot-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          timeout: 540s        # макс. 540 с для Gen2; аудит сканирует блокчейн
+          memory: 512Mi        # Stellar SDK + paging требует памяти
           env_vars: |-
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}

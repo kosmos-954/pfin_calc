@@ -1,4 +1,114 @@
-# Настройка инфраструктуры GCP для Stellar Bot
+# PFIN Stellar Monitor Bot
+
+Автоматизированный мониторинг выплат и выкупа токена **PFIN** на блокчейне Stellar.
+
+## Описание
+
+Бот отслеживает целевой кошелёк на Stellar и контролирует соблюдение программы выплат держателям токена PFIN и программы выкупа токенов.
+
+**Логика программы:**
+- Каждое **1-е число месяца** каждый холдер PFIN получает выплату в USDM (1 PFIN = 1 USDM) в размере `N%` от своего баланса
+- Каждое **1-е число месяца** выставляется ордер на выкуп PFIN за USDM на эквивалентную сумму
+- Ставка `N%` начинается с `base_rate_pct` (0.1%) в год старта и увеличивается на `base_rate_pct` каждый следующий год
+- Кошелёк-эмитент (`target_account`) исключается из расчётов как получатель
+
+**Конфигурация** (`config.yaml`):
+| Параметр | Описание |
+|---|---|
+| `schedule_start` | Дата начала обязательства (не дата первой выплаты) |
+| `payment_delay_months` | Через сколько месяцев после старта — первая выплата |
+| `base_rate_pct` | Ставка в год старта, % (по умолчанию 0.1) |
+| `monitor_window_minutes` | Окно мониторинга в минутах (= периодичность крона) |
+
+---
+
+## Команды (`--task`)
+
+### `monitor` — Мониторинг за окно времени
+Сканирует операции целевого кошелька за последние `monitor_window_minutes` минут.
+Отправляет **одно итоговое сообщение** если были события:
+- Исходящие выплаты в USDM → суммарный объём + количество уникальных кошельков получателей
+- Ордера на выкуп/продажу в паре PFIN/USDM → список с ценой и объёмом
+
+```
+python bot.py --task monitor
+```
+
+---
+
+### `audit` — Аудит выплат с момента старта
+Сравнивает **ожидаемые** выплаты и выкупы (по графику) с **фактическими** из блокчейна.
+
+Особенности:
+- **FIFO-атрибуция**: платёж, пришедший позже срока, автоматически закрывает самое старое невыполненное обязательство — например, платёж от 10 февраля закрывает долг январского периода
+- **Зачёт переплаты**: переплата в одном периоде уменьшает обязательство следующего
+- Отображает просрочку исполнения для выполненных платежей и текущую просрочку для невыполненных
+
+Формат вывода — разбивка по датам:
+```
+📅 01.11.2025  ставка 0.1%
+  💸 Выплата: 500.0000 / 500.0000 USDM  ✅
+     ⏰ Просрочка исполнения: +5 дн. (завершено: 06.11.2025)
+  🔄 Выкуп:   500.0000 / 500.0000 USDM  ✅
+
+━━━ Итоговая задолженность ━━━
+💸 Выплаты: ❌ долг 500.0000 USDM
+🔄 Выкуп  : ✅ без задолженности
+```
+
+```
+python bot.py --task audit
+```
+
+---
+
+### `calculate` — Расчёт ожидаемых сумм
+Запрашивает текущих холдеров PFIN из блокчейна, вычисляет ставку для текущего года и отправляет в Telegram ожидаемые суммы на **следующую дату выплат**:
+- Итоговая сумма выплат всем холдерам
+- Сумма ордера выкупа
+- Общий отток из кошелька
+
+```
+python bot.py --task calculate
+```
+
+---
+
+### `reminder` — Напоминание накануне выплат
+Запускается ежедневно. Если **завтра 1-е число** и дата >= первой плановой выплаты — отправляет в Telegram напоминание с расчётом ожидаемых сумм. В остальные дни ничего не делает.
+
+```
+python bot.py --task reminder
+```
+
+---
+
+### `debug` — Дамп операций
+Выводит в консоль все операции целевого кошелька за последние 30 дней с типом, активом, суммой и адресами. Используется для диагностики: проверить какой тип операций (`payment`, `manage_sell_offer` и т.д.) фактически присутствует в блокчейне.
+
+```
+python bot.py --task debug
+```
+
+---
+
+## Переменные и аргументы
+
+Приоритет источников токена и chat_id: **CLI > env > config.yaml**
+
+```bash
+# Через аргументы CLI
+python bot.py --task audit --token 123:ABC --chat-id -100123456
+
+# Через переменные окружения (GCP Cloud Functions)
+export TELEGRAM_BOT_TOKEN="123:ABC"
+export TELEGRAM_CHAT_ID="-100123456"
+python bot.py --task audit
+```
+
+---
+
+# Настройка инфраструктуры GCP
 
 В данном документе собраны команды Google Cloud CLI (`gcloud`) для инициализации окружения, настройки прав доступа и развертывания serverless-инфраструктуры (Cloud Functions + Cloud Scheduler) для бота.
 
@@ -79,6 +189,8 @@ cat gcp-key.json
 
 Команда для деплоя функции локально или из Cloud Shell (в CI/CD пайплайне эта логика оборачивается в GitHub Action).
 
+> Функция разворачивается **с аутентификацией** (без `--allow-unauthenticated`) — вызов только через OIDC-токен (Scheduler или curl с токеном).
+
 ```bash
 gcloud functions deploy stellar-bot \
   --gen2 \
@@ -87,8 +199,9 @@ gcloud functions deploy stellar-bot \
   --source=. \
   --entry-point=handle_request \
   --trigger-http \
-  --allow-unauthenticated \
-  --memory=256MB
+  --no-allow-unauthenticated \
+  --memory=512MB \
+  --timeout=540s
 ```
 
 ## 4. Настройка расписания (Cloud Scheduler)
@@ -98,6 +211,9 @@ gcloud functions deploy stellar-bot \
 > **Важно:** Gen2 функции требуют OIDC-аутентификации. Scheduler должен вызывать функцию от имени сервисного аккаунта с ролью `roles/run.invoker`.
 
 **4.0. Выдача права на вызов функции сервисному аккаунту:**
+
+> Роль `roles/run.invoker` уже выдана на уровне проекта в п. 2.3. Эта команда дублирует её на уровне конкретного сервиса — нужна только если хотите ограничить права одним сервисом вместо всего проекта.
+
 ```bash
 gcloud run services add-iam-policy-binding stellar-bot \
   --region=us-central1 \
@@ -125,7 +241,8 @@ gcloud scheduler jobs create http trigger-monitor \
   --http-method=POST \
   --headers="Content-Type=application/json" \
   --message-body='{"task": "monitor"}' \
-  --oidc-service-account-email="$SA_EMAIL"
+  --oidc-service-account-email="$SA_EMAIL" \
+  --attempt-deadline=120s
 ```
 
 **4.3. Задача 2: Ежедневные напоминания (10:00 UTC)**
@@ -138,7 +255,8 @@ gcloud scheduler jobs create http trigger-reminder \
   --http-method=POST \
   --headers="Content-Type=application/json" \
   --message-body='{"task": "reminder"}' \
-  --oidc-service-account-email="$SA_EMAIL"
+  --oidc-service-account-email="$SA_EMAIL" \
+  --attempt-deadline=180s
 ```
 
 **4.4. Задача 3: Еженедельный аудит (понедельник, 00:00 UTC)**
@@ -151,7 +269,25 @@ gcloud scheduler jobs create http trigger-audit \
   --http-method=POST \
   --headers="Content-Type=application/json" \
   --message-body='{"task": "audit"}' \
-  --oidc-service-account-email="$SA_EMAIL"
+  --oidc-service-account-email="$SA_EMAIL" \
+  --attempt-deadline=540s
+```
+
+**4.5. Задача 4: Расчёт ожидаемых сумм (каждое 28-е число, 09:00 UTC)**
+
+> Отправляет в Telegram расчёт выплат на следующий месяц заранее, перед днём выплат.
+
+```bash
+gcloud scheduler jobs create http trigger-calculate \
+  --location="us-central1" \
+  --schedule="0 9 28 * *" \
+  --time-zone="UTC" \
+  --uri="$FUNCTION_URL" \
+  --http-method=POST \
+  --headers="Content-Type=application/json" \
+  --message-body='{"task": "calculate"}' \
+  --oidc-service-account-email="$SA_EMAIL" \
+  --attempt-deadline=300s
 ```
 
 ## 5. Эксплуатация и мониторинг
@@ -187,6 +323,4 @@ curl -X POST "$FUNCTION_URL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"task": "audit"}'
-```
-
 ```

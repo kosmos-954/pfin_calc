@@ -408,9 +408,22 @@ def run_interval_monitor(config):
 
     now          = datetime.now(timezone.utc)
     window_min   = int(config.get('monitor_window_minutes', 15))
-    window_start = now - timedelta(minutes=window_min)
 
-    print(f"[*] Окно: {window_min} мин | {window_start.strftime('%Y-%m-%d %H:%M:%S')} — {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    # Находим предыдущий завершённый период, выровненный по часу.
+    # Пример: интервал 15 мин, время 00:49 → текущий слот 00:45-01:00
+    #                                          предыдущий слот 00:30-00:45
+    current_slot = now.minute // window_min   # индекс текущего слота в часе
+    if current_slot == 0:
+        # Предыдущий период в предыдущем часе
+        window_end   = now.replace(minute=0, second=0, microsecond=0)
+        window_start = window_end - timedelta(minutes=window_min)
+    else:
+        end_minute   = current_slot * window_min
+        start_minute = end_minute - window_min
+        window_end   = now.replace(minute=end_minute,   second=0, microsecond=0)
+        window_start = now.replace(minute=start_minute, second=0, microsecond=0)
+
+    print(f"[*] Период: {window_start.strftime('%Y-%m-%d %H:%M')} — {window_end.strftime('%H:%M')} UTC  (интервал {window_min} мин)")
 
     payment_total   = Decimal('0')
     payment_wallets = set()
@@ -430,6 +443,12 @@ def run_interval_monitor(config):
             stop_pagination = False
             for record in records:
                 created_at = datetime.fromisoformat(record['created_at'].replace('Z', '+00:00'))
+
+                # Записи новее window_end — ещё не наш период, пропускаем
+                if created_at >= window_end:
+                    continue
+
+                # Записи старше window_start — период закончился, стоп
                 if created_at < window_start:
                     print(f"[-] Предел окна: {created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
                     stop_pagination = True
@@ -483,7 +502,7 @@ def run_interval_monitor(config):
             parts.append(f"📊 <b>Ордера ({base_asset}/{payment_asset})</b>\n" + "\n".join(lines))
 
         if parts:
-            period = f"{window_start.strftime('%d.%m.%Y %H:%M')} — {now.strftime('%d.%m.%Y %H:%M')} UTC"
+            period = f"{window_start.strftime('%d.%m.%Y %H:%M')} — {window_end.strftime('%H:%M')} UTC"
             msg = f"📋 <b>Отчёт монитора</b>\n<i>{period}</i>\n\n" + "\n\n".join(parts)
             send_telegram_message(msg, config)
             print("[✓] Сообщение отправлено.")
