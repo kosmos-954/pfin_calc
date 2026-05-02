@@ -773,8 +773,8 @@ def run_circulation_check(config):
             buying_liab    = Decimal(b.get('buying_liabilities', '0'))
             selling_liab   = Decimal(b.get('selling_liabilities', '0'))
             print(f"  balance              : {target_balance:.7f}")
-            print(f"  buying_liabilities   : {buying_liab:.7f}  (зарезервировано USDM под ордера выкупа)")
-            print(f"  selling_liabilities  : {selling_liab:.7f}  (зарезервировано PFIN под офер продажи)")
+            print(f"  buying_liabilities   : {buying_liab:.7f}  (в единицах {base_asset})")
+            print(f"  selling_liabilities  : {selling_liab:.7f}  (в единицах {base_asset})")
             break
     print(f"\n  → ТЕКУЩЕЕ ОБРАЩЕНИЕ: {total_issued:.7f} − {target_balance:.7f} = "
           f"{total_issued - target_balance:.7f} {base_asset}")
