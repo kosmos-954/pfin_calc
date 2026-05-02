@@ -801,12 +801,9 @@ def run_circulation_check(config):
         print(f"Ошибка при реконструкции target_balance: {e}")
         return
 
-    print(f"[*] Реконструируем исторический total_issued через эффекты эмитента...")
-    try:
-        hist_issued_map = get_historical_total_issued_at_dates(config, periods)
-    except Exception as e:
-        print(f"Ошибка при реконструкции total_issued: {e}")
-        hist_issued_map = {d: total_issued for d in periods}   # fallback
+    print(f"[*] Историческая реконструкция total_issued недоступна в этой диагностике; "
+          f"используем текущее total_issued для всех дат.")
+    hist_issued_map = {d: total_issued for d in periods}
 
     for period_date in periods:
         tbal        = target_bals.get(period_date, Decimal('0'))
