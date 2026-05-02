@@ -557,6 +557,12 @@ def handle_request(request):
 
     config = load_config()
 
+    # Применяем переменные окружения (заданы в deploy.yml через secrets)
+    if os.environ.get('TELEGRAM_BOT_TOKEN'):
+        config['telegram']['bot_token'] = os.environ['TELEGRAM_BOT_TOKEN']
+    if os.environ.get('TELEGRAM_CHAT_ID'):
+        config['telegram']['chat_id'] = os.environ['TELEGRAM_CHAT_ID']
+
     try:
         if task == 'reminder':
             run_daily_reminder(config)
@@ -567,12 +573,14 @@ def handle_request(request):
         elif task == 'audit':
             run_weekly_audit(config)
             return 'Аудит отработал', 200
+        elif task == 'calculate':
+            run_calculate(config)
+            return 'Расчёт отработал', 200
         else:
-            return 'Неизвестная задача', 400
+            return f'Неизвестная задача: {task}', 400
     except Exception as e:
-        # Логируем ошибку в Cloud Logging
         print(f"Критическая ошибка выполнения {task}: {e}")
-        return f"Внутренняя ошибка", 500
+        return 'Внутренняя ошибка', 500
 # --- Точка входа ---
 
 if __name__ == "__main__":

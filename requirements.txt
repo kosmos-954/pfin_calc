@@ -1,3 +1,4 @@
 stellar-sdk
 pyyaml
 requests
+functions-framework
