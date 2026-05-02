@@ -17,4 +17,4 @@ payment_delay_months: 1
 # Базовая ставка в год старта: 0.1% (+0.1% каждый следующий год)
 base_rate_pct: 0.1
 # Окно мониторинга в минутах (запускать кроном с той же периодичностью)
-monitor_window_minutes: 43200
+monitor_window_minutes: 15
