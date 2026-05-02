@@ -973,6 +973,9 @@ def handle_request(request):
         elif task == 'calculate':
             run_calculate(config)
             return 'Расчёт отработал', 200
+        elif task == 'circulation':
+            run_circulation_check(config)
+            return 'Проверка обращения отработала', 200
         else:
             return f'Неизвестная задача: {task}', 400
     except Exception as e:
