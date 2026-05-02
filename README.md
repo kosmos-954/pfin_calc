@@ -294,7 +294,7 @@ gcloud scheduler jobs create http trigger-calculate \
 
 **Принудительный запуск задачи вне расписания (тестирование):**
 ```bash
-gcloud scheduler jobs run trigger-monitor --location="us-central1"
+gcloud scheduler jobs run trigger-audit --location="us-central1"
 ```
 
 **Просмотр логов (Gen2 → Cloud Run логи):**
@@ -304,7 +304,7 @@ gcloud run services logs read stellar-bot \
   --region=us-central1 \
   --limit=20
 
-# Расширенный фильтр через Cloud Logging
+# Расширенный фильтр через Cloud Logging (выполнять в Cloud Shell / Linux)
 gcloud logging read \
   "resource.type=cloud_run_revision AND resource.labels.service_name=stellar-bot" \
   --limit=20 \
@@ -319,8 +319,120 @@ gcloud functions describe stellar-bot --gen2 --region=us-central1
 **Ручной тест через curl (без scheduler):**
 ```bash
 TOKEN=$(gcloud auth print-identity-token)
+FUNCTION_URL=$(gcloud functions describe stellar-bot \
+  --gen2 --region=us-central1 \
+  --format="value(serviceConfig.uri)")
+
 curl -X POST "$FUNCTION_URL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"task": "audit"}'
 ```
+
+---
+
+## 6. Защита от несанкционированных вызовов и контроль бюджета
+
+### 6.1. Запрет публичных вызовов функции
+
+> ⚠️ **Порядок важен:** Cloud Run сервис создаётся только при первом деплое функции. Все команды этого раздела выполняются **после** успешного деплоя (раздел 3 или GitHub Actions).
+
+**Убедиться что сервис существует и найти его точное имя:**
+```bash
+# Проверить что сервис задеплоен
+gcloud run services list --region=us-central1
+
+# Если пусто — сначала выполните деплой из раздела 3
+```
+
+**Проверить, что публичный доступ отсутствует:**
+```bash
+gcloud run services get-iam-policy stellar-bot --region=us-central1
+# В выводе НЕ должно быть "allUsers" или "allAuthenticatedUsers"
+```
+
+**Явно зафиксировать IAM-политику сервиса (только SA-планировщика).**
+
+Создать файл `iam-policy.yaml` (замените `PROJECT_ID`):
+```yaml
+version: 1
+bindings:
+- role: roles/run.invoker
+  members:
+  - serviceAccount:github-deployer@PROJECT_ID.iam.gserviceaccount.com
+```
+
+```bash
+# Убедиться что PROJECT_ID совпадает с реальным проектом
+echo $PROJECT_ID
+# или: gcloud config get-value project
+
+# Применить политику (только после успешного деплоя)
+gcloud run services set-iam-policy stellar-bot \
+  --region=us-central1 \
+  iam-policy.yaml
+```
+
+> Файл `iam-policy.yaml` не нужен в репозитории — добавьте его в `.gitignore`.
+
+**Ограничить максимальное число одновременных экземпляров (защита от флуда):**
+```bash
+gcloud run services update stellar-bot \
+  --region=us-central1 \
+  --max-instances=1
+```
+
+---
+
+### 6.2. Бюджет и контроль расходов
+
+```bash
+# 1. Включить Billing Budgets API
+gcloud services enable billingbudgets.googleapis.com
+
+# 2. Получить ID биллинг-аккаунта (берём первый открытый)
+BILLING_ID=$(gcloud billing accounts list \
+  --filter="open=true" \
+  --format="value(name)" \
+  | head -1)
+echo "Billing account: $BILLING_ID"
+
+# 3. Создать бюджет $1/мес с уведомлениями при 50%, 90%, 100%
+#    percent: float от 0.0 до 1.0 (0.5 = 50%, 1.0 = 100%)
+gcloud billing budgets create \
+  --billing-account="$BILLING_ID" \
+  --display-name="stellar-bot-budget" \
+  --budget-amount=1.00USD \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0
+```
+
+> Уведомления отправляются на email биллинг-аккаунта. Для Telegram-уведомлений потребуется отдельно настроить Pub/Sub → Cloud Function.
+
+**Рекомендуется: развернуть бота в изолированном проекте GCP** — тогда при превышении бюджета можно безопасно отключить биллинг только для него:
+
+```bash
+# Создать и настроить отдельный проект
+gcloud projects create pfin-stellar-bot --name="PFIN Stellar Bot"
+gcloud config set project pfin-stellar-bot
+
+# Привязать биллинг-аккаунт
+gcloud billing projects link pfin-stellar-bot \
+  --billing-account="$BILLING_ID"
+```
+
+---
+
+### 6.3. Чеклист безопасности
+
+| | Мера |
+|---|---|
+| ☐ | Функция деплоится с `--no-allow-unauthenticated` |
+| ☐ | Scheduler вызывает через `--oidc-service-account-email` |
+| ☐ | IAM-политика сервиса содержит только `github-deployer` SA (`iam-policy.yaml` применён) |
+| ☐ | `max-instances=1` установлен на Cloud Run сервисе |
+| ☐ | Бюджет $1/мес с уведомлениями создан |
+| ☐ | Бот деплоится в изолированный проект GCP |
+| ☐ | Секреты (`GCP_CREDENTIALS`, токены) не закоммичены в репозиторий |
+| ☐ | `config.yaml` и `iam-policy.yaml` добавлены в `.gitignore` |

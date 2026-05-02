@@ -1,0 +1,18 @@
+# Конфиг с приватными адресами кошельков — не коммитить
+config.yaml
+
+# IAM-политика с именами SA
+iam-policy.yaml
+
+# GCP-ключи
+gcp-key.json
+*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
