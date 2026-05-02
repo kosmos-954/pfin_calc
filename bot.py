@@ -544,7 +544,7 @@ def run_weekly_audit(config):  # FIFO-атрибуция
             f"📊 <b>Аудит PFIN</b>\n"
             f"📌 Начало обязательства: {start_date.strftime('%d.%m.%Y')} "
             f"| первая выплата: {first_pay.strftime('%d.%m.%Y')}\n"
-            f"🪙 PFIN в обращении на начало текущего периода: {total_pfin_current:.4f} | Холдеров: {len(holders)}\n"
+            f"🪙 PFIN в обращении на начало текущего периода: {total_pfin_last_period_start:.4f} | Холдеров: {len(holders)}\n"
             f"📈 Ставка сейчас: {float(rate_now * 100):.1f}%/мес\n\n"
             + "\n\n".join(period_lines)
             + f"\n\n━━━ <b>Итоговая задолженность</b> ━━━\n"
