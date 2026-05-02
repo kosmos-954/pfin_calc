@@ -25,6 +25,8 @@ jobs:
           region: us-central1
           entry_point: handle_request
           source_dir: .
+          generation: 2
+          service_account: github-deployer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
           env_vars: |-
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
