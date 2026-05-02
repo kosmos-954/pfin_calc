@@ -750,14 +750,7 @@ def run_circulation_check(config):
     print(f"  claimable_balances_amount : {rec.get('claimable_balances_amount', '—')}")
     print(f"  liquidity_pools_amount    : {rec.get('liquidity_pools_amount', '—')}")
     print(f"  contracts_amount          : {rec.get('contracts_amount', '—')}")
-    total_issued = (
-        Decimal(bal.get('authorized', '0')) +
-        Decimal(bal.get('authorized_to_maintain_liabilities', '0')) +
-        Decimal(bal.get('unauthorized', '0')) +
-        Decimal(rec.get('claimable_balances_amount', '0')) +
-        Decimal(rec.get('liquidity_pools_amount', '0')) +
-        Decimal(rec.get('contracts_amount', '0'))
-    )
+    total_issued = get_total_pfin_issued(config)
     print(f"\n  → ИТОГО ВЫПУЩЕНО: {total_issued:.7f} {base_asset}")
 
     # 2. Баланс target_account прямо сейчас
