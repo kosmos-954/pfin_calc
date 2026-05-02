@@ -1,6 +1,9 @@
 import yaml
+import os
 import requests
 import argparse
+import functions_framework
+
 from datetime import datetime, timedelta, timezone
 from stellar_sdk import Server
 import time
@@ -542,6 +545,34 @@ def run_debug_dump(config):
     print(f"\n{'='*70}\nВсего операций за 30 дней: {total}\n{'='*70}\n")
 
 
+@functions_framework.http
+def handle_request(request):
+    """Точка входа для Cloud Functions"""
+    request_json = request.get_json(silent=True)
+
+    if request_json and 'task' in request_json:
+        task = request_json['task']
+    else:
+        return 'Отсутствует параметр task', 400
+
+    config = load_config()
+
+    try:
+        if task == 'reminder':
+            run_daily_reminder(config)
+            return 'Напоминания отработали', 200
+        elif task == 'monitor':
+            run_interval_monitor(config)
+            return 'Мониторинг отработал', 200
+        elif task == 'audit':
+            run_weekly_audit(config)
+            return 'Аудит отработал', 200
+        else:
+            return 'Неизвестная задача', 400
+    except Exception as e:
+        # Логируем ошибку в Cloud Logging
+        print(f"Критическая ошибка выполнения {task}: {e}")
+        return f"Внутренняя ошибка", 500
 # --- Точка входа ---
 
 if __name__ == "__main__":
@@ -559,11 +590,16 @@ if __name__ == "__main__":
     args   = parser.parse_args()
     config = load_config()
 
-    # Аргументы CLI имеют приоритет над config.yaml
+    # Приоритет: CLI-аргументы → переменные окружения → config.yaml
     if args.token:
         config['telegram']['bot_token'] = args.token
+    elif os.environ.get('TELEGRAM_BOT_TOKEN'):
+        config['telegram']['bot_token'] = os.environ['TELEGRAM_BOT_TOKEN']
+
     if args.chat_id:
         config['telegram']['chat_id'] = args.chat_id
+    elif os.environ.get('TELEGRAM_CHAT_ID'):
+        config['telegram']['chat_id'] = os.environ['TELEGRAM_CHAT_ID']
 
     if args.task == 'reminder':
         run_daily_reminder(config)
