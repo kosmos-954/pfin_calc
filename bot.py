@@ -139,10 +139,12 @@ def get_target_pfin_balance_at_period_dates(config, period_dates):
     result     = {}
     balance    = current_balance
 
-    # Даты >= сегодня → текущий баланс
+    # Для будущих дат оставляем текущий баланс как best-effort.
+    # Для сегодняшней даты тоже нужен баланс на начало дня, поэтому
+    # её обрабатываем через "размотку" effects вместе с прошлыми датами.
     remaining = []
     for d in dates_desc:
-        if d >= today:
+        if d > today:
             result[d] = balance
         else:
             remaining.append(d)
