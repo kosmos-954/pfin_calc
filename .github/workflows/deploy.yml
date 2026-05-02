@@ -20,6 +20,15 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Enable required APIs
+        run: |
+          gcloud services enable \
+            cloudresourcemanager.googleapis.com \
+            cloudfunctions.googleapis.com \
+            cloudbuild.googleapis.com \
+            run.googleapis.com \
+            artifactregistry.googleapis.com
+
       - name: Deploy Cloud Function (Gen2)
         run: |
           gcloud functions deploy stellar-bot \

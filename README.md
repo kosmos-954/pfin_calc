@@ -117,14 +117,22 @@ python bot.py --task audit
 
 ## 1. Инициализация проекта
 
-Включение необходимых API для работы функций 2-го поколения и планировщика:
+Включение необходимых API для работы функций 2-го поколения и планировщика.
+
+> Выполняется **один раз** от имени владельца проекта (не сервисного аккаунта).
+
 ```bash
 gcloud services enable \
+  cloudresourcemanager.googleapis.com \
   cloudfunctions.googleapis.com \
   cloudbuild.googleapis.com \
   run.googleapis.com \
-  cloudscheduler.googleapis.com
+  cloudscheduler.googleapis.com \
+  billingbudgets.googleapis.com \
+  artifactregistry.googleapis.com
 ```
+
+> `cloudresourcemanager.googleapis.com` должен быть включён **до** первого запуска GitHub Actions — без него деплой упадёт с ошибкой `does not have permission`.
 
 ## 2. Настройка сервисного аккаунта (IAM) для GitHub Actions
 
@@ -169,6 +177,11 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$SA_EMAIL" \
   --role="roles/storage.admin"
+
+# Право включать API (нужно для шага Enable required APIs в CI)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$SA_EMAIL" \
+  --role="roles/serviceusage.serviceUsageAdmin"
 ```
 
 **2.4. Генерация ключа доступа (для сохранения в GitHub Secrets):**
