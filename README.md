@@ -433,22 +433,25 @@ gcloud run services update stellar-bot \
 # 1. Включить Billing Budgets API
 gcloud services enable billingbudgets.googleapis.com
 
-# 2. Получить ID биллинг-аккаунта (берём первый открытый)
+# 2. Получить ID биллинг-аккаунта
+#    name возвращает "billingAccounts/XXXXXX-XXXXXX-XXXXXX" — отрезаем префикс
 BILLING_ID=$(gcloud billing accounts list \
   --filter="open=true" \
   --format="value(name)" \
-  | head -1)
-echo "Billing account: $BILLING_ID"
+  | head -1 \
+  | sed 's|billingAccounts/||')
+echo "Billing account ID: $BILLING_ID"
+# Должно быть вида: XXXXXX-XXXXXX-XXXXXX (без префикса billingAccounts/)
 
 # 3. Создать бюджет $1/мес с уведомлениями при 50%, 90%, 100%
 #    percent: float от 0.0 до 1.0 (0.5 = 50%, 1.0 = 100%)
 gcloud billing budgets create \
   --billing-account="$BILLING_ID" \
   --display-name="stellar-bot-budget" \
-  --budget-amount=1.00USD \
-  --threshold-rule=percent=0.5 \
-  --threshold-rule=percent=0.9 \
-  --threshold-rule=percent=1.0
+  --budget-amount="1.00USD" \
+  --threshold-rule="percent=0.5" \
+  --threshold-rule="percent=0.9" \
+  --threshold-rule="percent=1.0"
 ```
 
 > Уведомления отправляются на email биллинг-аккаунта. Для Telegram-уведомлений потребуется отдельно настроить Pub/Sub → Cloud Function.
