@@ -17,25 +17,25 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
-      - name: Deploy Cloud Function
-        id: deploy
-        uses: google-github-actions/deploy-cloud-functions@v2
-        with:
-          name: stellar-bot
-          runtime: python311
-          region: us-central1
-          entry_point: handle_request
-          source_dir: .
-          generation: 2
-          timeout: 540s
-          memory: 512Mi
-          env_vars: |-
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Function (Gen2)
+        run: |
+          gcloud functions deploy stellar-bot \
+            --gen2 \
+            --runtime=python311 \
+            --region=us-central1 \
+            --source=. \
+            --entry-point=handle_request \
+            --trigger-http \
+            --no-allow-unauthenticated \
+            --memory=512MB \
+            --timeout=540s \
+            --set-env-vars="TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }},TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}"
 
       - name: Verify deployment
         run: |
-          echo "Function URL: ${{ steps.deploy.outputs.url }}"
           gcloud functions describe stellar-bot \
             --v2 \
             --region=us-central1 \
