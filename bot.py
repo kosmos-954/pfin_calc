@@ -139,10 +139,12 @@ def get_target_pfin_balance_at_period_dates(config, period_dates):
     result     = {}
     balance    = current_balance
 
-    # Даты >= сегодня → текущий баланс
+    # Для будущих дат оставляем текущий баланс как best-effort.
+    # Для сегодняшней даты тоже нужен баланс на начало дня, поэтому
+    # её обрабатываем через "размотку" effects вместе с прошлыми датами.
     remaining = []
     for d in dates_desc:
-        if d >= today:
+        if d > today:
             result[d] = balance
         else:
             remaining.append(d)
@@ -437,8 +439,8 @@ def run_weekly_audit(config):  # FIFO-атрибуция
                   f"(+burn {burns_after:.4f} -mint {mints_after:.4f}) "
                   f"| target={target_bal:.4f} | обр={circulation:.4f} | ожид={exp:.4f}")
 
-        total_pfin_current = periods[-1]['circulation'] if periods else Decimal('0')
-        print(f"[*] Текущее обращение (последний период): {total_pfin_current:.7f}")
+        total_pfin_last_period_start = periods[-1]['circulation'] if periods else Decimal('0')
+        print(f"[*] Обращение на начало последнего периода: {total_pfin_last_period_start:.7f}")
 
         # 5. FIFO-атрибуция: платежи от старых к новым закрывают самое старое обязательство.
         def fifo_attribute(ops_list, exp_key):
@@ -569,7 +571,7 @@ def run_weekly_audit(config):  # FIFO-атрибуция
             f"📊 <b>Аудит PFIN</b>\n"
             f"📌 Начало обязательства: {start_date.strftime('%d.%m.%Y')} "
             f"| первая выплата: {first_pay.strftime('%d.%m.%Y')}\n"
-            f"🪙 PFIN в обращении сейчас: {total_pfin_current:.4f} | Холдеров: {len(holders)}\n"
+            f"🪙 PFIN в обращении на начало текущего периода: {total_pfin_last_period_start:.4f} | Холдеров: {len(holders)}\n"
             f"📈 Ставка сейчас: {float(rate_now * 100):.1f}%/мес\n\n"
             + "<blockquote expandable>"
             + "\n\n".join(period_lines)
@@ -777,14 +779,7 @@ def run_circulation_check(config):
     print(f"  claimable_balances_amount : {rec.get('claimable_balances_amount', '—')}")
     print(f"  liquidity_pools_amount    : {rec.get('liquidity_pools_amount', '—')}")
     print(f"  contracts_amount          : {rec.get('contracts_amount', '—')}")
-    total_issued = (
-        Decimal(bal.get('authorized', '0')) +
-        Decimal(bal.get('authorized_to_maintain_liabilities', '0')) +
-        Decimal(bal.get('unauthorized', '0')) +
-        Decimal(rec.get('claimable_balances_amount', '0')) +
-        Decimal(rec.get('liquidity_pools_amount', '0')) +
-        Decimal(rec.get('contracts_amount', '0'))
-    )
+    total_issued = get_total_pfin_issued(config)
     print(f"\n  → ИТОГО ВЫПУЩЕНО: {total_issued:.7f} {base_asset}")
 
     # 2. Баланс target_account прямо сейчас
@@ -800,8 +795,8 @@ def run_circulation_check(config):
             buying_liab    = Decimal(b.get('buying_liabilities', '0'))
             selling_liab   = Decimal(b.get('selling_liabilities', '0'))
             print(f"  balance              : {target_balance:.7f}")
-            print(f"  buying_liabilities   : {buying_liab:.7f}  (зарезервировано USDM под ордера выкупа)")
-            print(f"  selling_liabilities  : {selling_liab:.7f}  (зарезервировано PFIN под офер продажи)")
+            print(f"  buying_liabilities   : {buying_liab:.7f}  (в единицах {base_asset})")
+            print(f"  selling_liabilities  : {selling_liab:.7f}  (в единицах {base_asset})")
             break
     print(f"\n  → ТЕКУЩЕЕ ОБРАЩЕНИЕ: {total_issued:.7f} − {target_balance:.7f} = "
           f"{total_issued - target_balance:.7f} {base_asset}")
@@ -828,12 +823,9 @@ def run_circulation_check(config):
         print(f"Ошибка при реконструкции target_balance: {e}")
         return
 
-    print(f"[*] Реконструируем исторический total_issued через эффекты эмитента...")
-    try:
-        hist_issued_map = get_historical_total_issued_at_dates(config, periods)
-    except Exception as e:
-        print(f"Ошибка при реконструкции total_issued: {e}")
-        hist_issued_map = {d: total_issued for d in periods}   # fallback
+    print(f"[*] Историческая реконструкция total_issued недоступна в этой диагностике; "
+          f"используем текущее total_issued для всех дат.")
+    hist_issued_map = {d: total_issued for d in periods}
 
     for period_date in periods:
         tbal        = target_bals.get(period_date, Decimal('0'))
@@ -1003,6 +995,9 @@ def handle_request(request):
         elif task == 'calculate':
             run_calculate(config)
             return 'Расчёт отработал', 200
+        elif task == 'circulation':
+            run_circulation_check(config)
+            return 'Проверка обращения отработала', 200
         else:
             return f'Неизвестная задача: {task}', 400
     except Exception as e:
