@@ -532,12 +532,39 @@ def run_weekly_audit(config):  # FIFO-атрибуция
         net_pay        = total_paid_pay - total_exp_pay
         net_buy        = total_paid_buy - total_exp_buy
 
-        def net_line(label, net, asset):
+        def max_overdue(exp_key, cov_key, contribs_key):
+            """
+            Максимальная просрочка по всем периодам:
+            - для полностью исполненных: дней от плановой даты до последней оплаты
+            - для частично/неисполненных: дней от плановой даты до сегодня
+            """
+            worst = 0
+            for p in periods:
+                exp      = p[exp_key]
+                cov      = p[cov_key]
+                contribs = p[contribs_key]
+                if exp <= 0:
+                    continue
+                if cov >= exp and contribs:
+                    last_date = max(c['date'] for c in contribs)
+                    delay = (last_date - p['date']).days
+                else:
+                    delay = (today - p['date']).days
+                if delay > worst:
+                    worst = delay
+            return worst
+
+        max_overdue_pay = max_overdue('exp_pay', 'cov_exp_pay', 'contribs_exp_pay')
+        max_overdue_buy = max_overdue('exp_buy', 'cov_exp_buy', 'contribs_exp_buy')
+
+        def net_line(label, net, asset, max_od):
+            overdue_str = f"  ⏰ макс. просрочка: <b>{max_od} дн.</b>" if max_od > 0 else ""
             if net < 0:
-                return f"{label}: ❌ <b>долг {abs(net):.4f} {asset}</b>"
+                return f"{label}: ❌ <b>долг {abs(net):.4f} {asset}</b>{overdue_str}"
             elif net > 0:
-                return f"{label}: ✅ <b>переплата +{net:.4f} {asset}</b> (зачёт в следующем периоде)"
-            return f"{label}: ✅ без задолженности"
+                return (f"{label}: ✅ <b>переплата +{net:.4f} {asset}</b>"
+                        f" (зачёт в следующем периоде){overdue_str}")
+            return f"{label}: ✅ без задолженности{overdue_str}"
 
         rate_now = calculate_rate(config)
         msg = (
@@ -546,10 +573,12 @@ def run_weekly_audit(config):  # FIFO-атрибуция
             f"| первая выплата: {first_pay.strftime('%d.%m.%Y')}\n"
             f"🪙 PFIN в обращении на начало текущего периода: {total_pfin_last_period_start:.4f} | Холдеров: {len(holders)}\n"
             f"📈 Ставка сейчас: {float(rate_now * 100):.1f}%/мес\n\n"
+            + "<blockquote expandable>"
             + "\n\n".join(period_lines)
+            + "</blockquote>"
             + f"\n\n━━━ <b>Итоговая задолженность</b> ━━━\n"
-            + net_line("💸 Выплаты", net_pay, payment_asset) + "\n"
-            + net_line("🔄 Выкуп  ", net_buy, payment_asset)
+            + net_line("💸 Выплаты", net_pay, payment_asset, max_overdue_pay) + "\n"
+            + net_line("🔄 Выкуп  ", net_buy, payment_asset, max_overdue_buy)
         )
 
         if len(msg) > 4000:
